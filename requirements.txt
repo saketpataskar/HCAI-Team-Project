@@ -1,0 +1,8 @@
+streamlit
+PyMuPDF
+langchain-text-splitters
+chromadb
+sentence-transformers
+transformers
+torch
+groq
