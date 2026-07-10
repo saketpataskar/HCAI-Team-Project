@@ -4,6 +4,18 @@ from chromadb.utils import embedding_functions
 from transformers import pipeline
 from groq import Groq
 from system_instruction import system_instructions
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    handlers=[
+        logging.FileHandler("tutor.log", mode="a", encoding="utf-8"),
+        logging.StreamHandler()  # Prints to terminal
+    ]
+)
+
+logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="AI Python Tutor", page_icon="🤖", layout="centered")
 st.title("🤖 AI Python Tutor")
@@ -72,7 +84,33 @@ def detect_anxiety(text):
     return f"Normal (Student is feeling {emotion})"
 
 if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+    welcome = """
+👋 **Welcome to the AI Python Tutor!**
+
+I'm here to help you learn Python step by step.
+
+I can:
+- Explain Python concepts
+- Help debug your code
+- Provide examples
+- Support you when you're feeling stuck
+
+If you're completely new, try asking:
+
+- *Start learning Python*
+- *Teach me Python from the beginning*
+- *Create a Python learning roadmap*
+
+Or simply ask me any Python question.
+"""
+
+    st.session_state.chat_history = [
+        {
+            "role": "assistant",
+            "display_content": welcome,
+            "ai_content": welcome
+        }
+    ]
 
 for message in st.session_state.chat_history:
     with st.chat_message(message["role"]):
@@ -80,22 +118,39 @@ for message in st.session_state.chat_history:
 
 
 if user_query := st.chat_input("Ask a question about Python..."):
+
+    logger.info("=" * 80)
+    logger.info(f"USER INPUT:\n{user_query}")
     with st.chat_message("user"):
         st.markdown(user_query)
+        
 
     anx = detect_anxiety(user_query)
+    logger.info(f"DETECTED EMOTION: {anx}")
     topic = extract_search_topic(user_query)
+    logger.info(f"EXTRACTED TOPIC: {topic}")
 
-    st.caption("Thinking....")
+    st.caption("💡 Preparing an explanation...")
     context_from_text = get_textbook_context(topic)
+    logger.info("RETRIEVED TEXTBOOK CONTEXT:")
+    logger.info(context_from_text if context_from_text else "No context retrieved.")
 
     prom = f"Student input: '{user_query}'\nEmotional state: {anx}\nTextbook Context:\n{context_from_text}"
+    logger.info("FINAL PROMPT SENT TO LLM:")
+    logger.info(prom)
     st.session_state.chat_history.append({"role": "user", "display_content": user_query, "ai_content": prom})
 
-    sys_ins = system_instructions
+    #sys_ins = system_instructions
     messages_for_api = [{"role": "system", "content": system_instructions}]
     for msg in st.session_state.chat_history:
         messages_for_api.append({"role": msg["role"], "content": msg.get("ai_content", msg["display_content"])})
+
+    logger.info("FULL MESSAGE HISTORY SENT TO LLM:")
+
+    for i, msg in enumerate(messages_for_api):
+        logger.info(f"\nMESSAGE {i+1}")
+        logger.info(f"ROLE: {msg['role']}")
+        logger.info(msg["content"])
 
     with st.chat_message("Tutor"):
         with st.spinner("Generating Answers..."):
@@ -105,6 +160,8 @@ if user_query := st.chat_input("Ask a question about Python..."):
                     model="llama-3.3-70b-versatile",
                 )
                 tutor_res = response.choices[0].message.content
+                logger.info("LLM RESPONSE:")
+                logger.info(tutor_res)
                 st.markdown(tutor_res)
                 
                 # F. Save AI reply to memory
